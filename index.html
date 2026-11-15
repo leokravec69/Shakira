@@ -331,7 +331,7 @@ function dogV(){
   <div class="card"><h3>🔔 Напоминания</h3>
     <p class="note">Приложение работает без интернета, но само присылать уведомления iPhone ему не позволяет. Поэтому ближайшие дела выгружаются в Календарь iPhone — он напомнит за день и в день процедуры.</p>
     <p class="note">🐩 Гав: когда открываете приложение и есть дела на сегодня или просроченные, при первом касании Шакира гавкает.</p><label>Время напоминания</label><input type="time" value="${D.remindTime}" onchange="D.remindTime=this.value;save()">
-    <button class="btn" style="margin-top:12px" onclick="exportICS()">📆 Добавить в Календарь iPhone</button><p class="note" style="margin-top:8px">Откроется список событий — нажмите «Добавить все». Если ничего не открылось, нажмите «Сохранить файл» и откройте его из «Файлов».</p><button class="btn ghost" style="margin-top:6px" onclick="saveICS()">Сохранить файл</button>
+    <button class="btn" style="margin-top:12px" onclick="exportICS()">📆 Добавить в Календарь iPhone</button><p class="note" style="margin-top:8px">Откроется список событий — нажмите «Добавить все». Если события не видны в Календаре: при добавлении выберите основной календарь (обычно «Календарь» или iCloud), а в приложении Календарь проверьте, что он включён в списке «Календари».</p><button class="btn ghost" style="margin-top:6px" onclick="saveICS()">Сохранить файл</button>
   </div>
   <div class="card"><h3>💾 Резервная копия</h3>
     <p class="note">Все данные хранятся только на этом телефоне. Раз в месяц сохраняйте копию в «Файлы» или отправляйте себе — так ничего не потеряется при смене телефона.</p>
