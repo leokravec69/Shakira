@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Шакира">
 <meta name="theme-color" content="#fbf4ee">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" id="touchIcon" href="icon-180.png">
 <title>Шакира — дневник здоровья</title>
 <style>
 :root{
@@ -205,6 +205,7 @@ const icon=c=>`<div class="ic" style="background:color-mix(in srgb,${CATS[c].c} 
 /* ===================== ЭКРАНЫ ===================== */
 let tab='home',calMonth=new Date(),selDay=today(),logFilter='all';
 function render(){
+  updateIcon();
   document.getElementById('title').textContent=D.dog.name||'Мой питомец';
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   const v=document.getElementById('view');
@@ -326,10 +327,11 @@ function dogV(){
     ${d.notes?`<div class="note" style="padding-top:8px">${esc(d.notes)}</div>`:''}
     <button class="btn ghost" style="margin-top:12px" onclick="openDog()">✏️ Изменить данные</button>
   </div>
+  <div class="card"><h3>📱 Иконка на экране «Домой»</h3><p class="note">На иконке — фото из профиля. iPhone запоминает иконку при установке, поэтому после смены фото иконку нужно переустановить: 1) «Сохранить копию» ниже; 2) открыть сайт в Safari → «Поделиться» → «На экран Домой»; 3) в новой иконке «Загрузить» копию; 4) старую иконку удалить.</p></div>
   <div class="card"><h3>🔔 Напоминания</h3>
     <p class="note">Приложение работает без интернета, но само присылать уведомления iPhone ему не позволяет. Поэтому ближайшие дела выгружаются в Календарь iPhone — он напомнит за день и в день процедуры.</p>
     <p class="note">🐩 Гав: когда открываете приложение и есть дела на сегодня или просроченные, при первом касании Шакира гавкает.</p><label>Время напоминания</label><input type="time" value="${D.remindTime}" onchange="D.remindTime=this.value;save()">
-    <button class="btn" style="margin-top:12px" onclick="exportICS()">📆 Добавить в Календарь iPhone</button>
+    <button class="btn" style="margin-top:12px" onclick="exportICS()">📆 Добавить в Календарь iPhone</button><p class="note" style="margin-top:8px">Откроется список событий — нажмите «Добавить все». Если ничего не открылось, нажмите «Сохранить файл» и откройте его из «Файлов».</p><button class="btn ghost" style="margin-top:6px" onclick="saveICS()">Сохранить файл</button>
   </div>
   <div class="card"><h3>💾 Резервная копия</h3>
     <p class="note">Все данные хранятся только на этом телефоне. Раз в месяц сохраняйте копию в «Файлы» или отправляйте себе — так ничего не потеряется при смене телефона.</p>
@@ -431,9 +433,22 @@ document.getElementById('fileIn').onchange=e=>{
   rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.dog)throw 0;if(!confirm('Заменить текущие данные данными из копии?'))return;D=Object.assign(structuredClone(DEFAULT),o);save();render();toast('Копия загружена')}catch(_){toast('Это не файл копии')}};
   rd.readAsText(file);e.target.value='';
 };
-function exportICS(){
+
+/* Календарь: iPhone открывает .ics с адреса сайта и предлагает «Добавить все».
+   Файл кладём в кэш, сервис-воркер отдаёт его по адресу calendar.ics */
+let lastICS=null;
+async function openICS(text){
+  lastICS=text;
+  try{if(navigator.serviceWorker&&navigator.serviceWorker.controller){const c=await caches.open('ics');
+    await c.put(new Request('calendar.ics'),new Response(text,{headers:{'Content-Type':'text/calendar; charset=utf-8'}}));
+    location.href='calendar.ics?t='+Date.now();return}}catch(e){}
+  location.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(text);
+}
+function saveICS(){const t=buildICS();if(t)shareFile(`${D.dog.name||'pet'}-reminders.ics`,t,'text/calendar')}
+function exportICS(){const t=buildICS();if(t)openICS(t)}
+function buildICS(){
   const up=upcoming().filter(u=>u.date>=addDays(today(),-1));
-  if(!up.length){toast('Нет запланированных дел');return}
+  if(!up.length){toast('Нет запланированных дел');return null}
   const [hh,mm]=(D.remindTime||'10:00').split(':');const stamp=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
   const escI=s=>String(s).replace(/\\/g,'\\\\').replace(/[,;]/g,m=>'\\'+m).replace(/\n/g,'\\n');
   let L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pet Health//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:'+escI(D.dog.name+' — здоровье')];
@@ -446,7 +461,7 @@ function exportICS(){
     L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Сегодня','TRIGGER:PT0M','END:VALARM','END:VEVENT');
   });
   L.push('END:VCALENDAR');
-  shareFile(`${D.dog.name||'pet'}-reminders.ics`,L.join('\r\n'),'text/calendar');
+  return L.join('\r\n');
 }
 
 
@@ -472,6 +487,12 @@ let barked=false;
 function firstTouch(){if(barked)return;barked=true;const n=dueNow();if(n){bark(n>1?3:2);toast('🐩 Гав! Сегодня: '+n+' '+plural(n,'дело','дела','дел'))}}
 document.addEventListener('touchstart',firstTouch,{passive:true});document.addEventListener('click',firstTouch);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')barked=false});
+
+/* Иконка «На экран Домой» = текущее фото в профиле */
+let iconKey='';
+function updateIcon(){const ph=D.dog.photo;if(!ph||iconKey===ph.length+'')return;iconKey=ph.length+'';
+  const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=180;c.getContext('2d').drawImage(im,0,0,180,180);
+    try{document.getElementById('touchIcon').href=c.toDataURL('image/png')}catch(e){}};im.src=ph}
 /* ===================== ПРОЧЕЕ ===================== */
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 let tt;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2200)}
