@@ -35,6 +35,13 @@ main{padding:6px 14px 20px}
 h3{margin:4px 2px 8px;font-size:18px}
 .row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
 .row:last-child{border-bottom:0}
+.row.tap{cursor:pointer}.row .chev{color:#c9bfc6;font-size:20px;margin-left:2px}
+.tk{background:color-mix(in srgb,var(--accent) 6%,white);border-radius:16px;padding:12px 14px;margin-top:12px}
+.tk-h{font-weight:800;font-size:15px;margin-bottom:4px}
+.btn[disabled]{opacity:.38}
+.due{border:2px solid var(--accent)}
+.wrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
+.wrow:last-child{border-bottom:0}.wrow small{display:block;color:#8d8292;font-size:12px}.wrow .dlt{font-size:12px;font-weight:700;min-width:52px;text-align:right}
 .ic{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;flex:none}
 .grow{flex:1;min-width:0}
 .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -154,6 +161,9 @@ const DEFAULT={
   remindTime:'10:00'
 };
 let D=load();
+/* разовая чистка: 16.11 Симпарика отметилась случайным нажатием, настоящая — 17.11 */
+if(!D.fix1){const a=D.records.find(r=>r.cat==='tick'&&r.date==='2026-11-16'&&/симпарик/i.test(r.title)),b=D.records.find(r=>r.cat==='tick'&&r.date==='2026-11-17'&&/симпарик/i.test(r.title));
+ if(a&&b)D.records=D.records.filter(r=>r!==a);D.fix1=1;try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}}
 function load(){try{const s=localStorage.getItem(KEY);if(s){const o=JSON.parse(s);return Object.assign(structuredClone(DEFAULT),o,{dog:Object.assign({},DEFAULT.dog,o.dog||{})});}}catch(e){}return structuredClone(DEFAULT)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){toast('Не удалось сохранить: мало места')}}
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -176,6 +186,14 @@ function age(birth){
   if(y)p.push(y+' '+plural(y,'год','года','лет'));if(m)p.push(m+' '+plural(m,'месяц','месяца','месяцев'));
   if(!y&&d)p.push(d+' '+plural(d,'день','дня','дней'));return p.join(' ')||'новорождённая';
 }
+function ageAt(birth,date){
+  if(!birth||!date||date<birth)return '';const b=parse(birth),t=parse(date);
+  let m=(t.getFullYear()-b.getFullYear())*12+t.getMonth()-b.getMonth();let d=t.getDate()-b.getDate();
+  if(d<0){m--;d+=new Date(t.getFullYear(),t.getMonth(),0).getDate()}
+  const y=Math.floor(m/12);m%=12;const p=[];
+  if(y)p.push(y+' '+plural(y,'год','года','лет'));if(m)p.push(m+' мес.');if(!y&&d)p.push(d+' дн.');
+  return p.join(' ')||'0 дн.';
+}
 function repeatText(n){if(!n)return '';if(n===1)return 'каждый день';if(n%365===0)return 'раз в '+(n/365>1?n/365+' года':'год');if(n%30===0&&n<365)return 'раз в '+(n/30>1?n/30+' '+plural(n/30,'месяц','месяца','месяцев'):'месяц');if(n%7===0)return 'раз в '+(n/7>1?n/7+' '+plural(n/7,'неделю','недели','недель'):'неделю');return 'раз в '+n+' '+plural(n,'день','дня','дней')}
 
 /* ===================== ПЛАНЫ ===================== */
@@ -186,9 +204,9 @@ function upcoming(){
   D.records.forEach(r=>{if(!r.repeat)return;const k=r.cat+'|'+r.title.trim().toLowerCase();if(!last[k]||r.date>last[k].date)last[k]=r});
   Object.values(last).forEach(r=>{
     if(r.stopped)return;
-    const next=addDays(r.date,r.repeat);
+    const next=(r.nextDate&&r.nextDate>r.date)?r.nextDate:addDays(r.date,r.repeat);
     if(r.until&&next>r.until)return;
-    out.push({id:'auto-'+r.id,cat:r.cat,title:r.title,date:next,note:r.note||'',repeat:r.repeat,until:r.until,kind:'auto',src:r.id});
+    out.push({id:'auto-'+r.id,cat:r.cat,title:r.title,date:next,time:r.nextTime||r.time||'',note:r.note||'',repeat:r.repeat,until:r.until,kind:'auto',src:r.id});
   });
   return out.sort((a,b)=>a.date.localeCompare(b.date));
 }
@@ -217,7 +235,7 @@ function lastWeight(){const w=[...D.weights].sort((a,b)=>a.date.localeCompare(b.
 
 function homeV(){
   const up=upcoming();const lw=lastWeight();
-  const soon=up.filter(u=>diff(today(),u.date)<=30);const later=up.filter(u=>diff(today(),u.date)>30).slice(0,5);
+  const soon=up.filter(u=>u.date>today()&&diff(today(),u.date)<=30);const later=up.filter(u=>diff(today(),u.date)>30).slice(0,5);
   const bd=D.dog.birth?nextBirthday():null;
   return `
   <div class="card hero">
@@ -239,6 +257,7 @@ function homeV(){
     <button onclick="openAdd('worm')"><span>🪱</span>Глисты</button>
     <button onclick="openWeight()"><span>⚖️</span>Вес</button>
   </div>
+  ${up.filter(u=>u.date<=today()).length?`<div class="card due"><h3>⏰ Ждут отметки</h3><p class="note" style="margin:-4px 0 4px">Нажмите, чтобы отметить «Сделали» или перенести дату.</p>${up.filter(u=>u.date<=today()).map(upRow).join('')}</div>`:''}
   <div class="card">
     <h3>Ближайшие 30 дней</h3>
     ${soon.length?soon.map(upRow).join(''):'<div class="empty">Ничего не запланировано 🎉<br>Отметьте сделанную прививку или таблетку с повтором — приложение само посчитает следующую дату.</div>'}
@@ -250,9 +269,9 @@ function homeV(){
 }
 function nextBirthday(){const b=parse(D.dog.birth),t=new Date();let n=new Date(t.getFullYear(),b.getMonth(),b.getDate());if(iso(n)<today())n=new Date(t.getFullYear()+1,b.getMonth(),b.getDate());return diff(today(),iso(n))}
 function upRow(u){
-  return `<div class="row">${icon(u.cat)}
-    <div class="grow" onclick="openUp('${u.id}')"><div class="t">${esc(u.title)}</div><div class="s">${fmt(u.date)}${u.repeat?' · '+repeatText(u.repeat):''}</div></div>
-    <div style="text-align:right">${badge(u.date)}<br><button class="btn small sec" style="margin-top:5px" onclick="markDone('${u.id}')">✓ Сделано</button></div></div>`;
+  return `<div class="row tap" onclick="openTask('${u.id}')">${icon(u.cat)}
+    <div class="grow"><div class="t">${esc(u.title)}</div><div class="s">${fmt(u.date)}${u.time?' · '+u.time:''}${u.repeat?' · '+repeatText(u.repeat):''}</div></div>
+    <div style="text-align:right">${badge(u.date)}</div><span class="chev">›</span></div>`;
 }
 function recRow(r){
   return `<div class="row" onclick="openAdd(null,'${r.id}')">${icon(r.cat)}
@@ -302,31 +321,47 @@ function logV(){
     ${f.map(k=>`<button class="${logFilter===k?'on':''}" onclick="logFilter='${k}';render()">${CATS[k].i} ${CATS[k].n}</button>`).join('')}</div>
   ${logFilter==='all'?`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>⚖️ Вес</h3><button class="btn small sec" onclick="openWeight()">＋ Вес</button></div>
     ${ws.length>1?chart(ws):''}
-    ${ws.length?[...ws].reverse().slice(0,6).map(w=>`<div class="kv" onclick="delWeight('${w.id}')"><span>${fmt(w.date)}</span><b>${w.kg} кг</b></div>`).join(''):'<div class="empty">Добавьте первое взвешивание</div>'}
+    ${weightRows(ws,6)}
   </div>`:''}
   <div class="card"><h3>История</h3>${recs.map(recRow).join('')||'<div class="empty">Пока пусто</div>'}</div>`;
 }
+function weightRows(ws,n){
+  if(!ws.length)return '<div class="empty">Добавьте первое взвешивание</div>';
+  const b=D.dog.birth;const rows=ws.map((w,i)=>({w,d:i?Math.round((w.kg-ws[i-1].kg)*100)/100:null})).reverse();
+  return (n?rows.slice(0,n):rows).map(({w,d})=>`<div class="wrow" onclick="delWeight('${w.id}')"><div>${b?ageAt(b,w.date):fmt(w.date)}<small>${fmt(w.date)}</small></div>
+    <span class="dlt" style="color:${d>0?'#3fae7a':d<0?'var(--red)':'#8d8292'}">${d===null?'':(d>0?'+':'')+String(d).replace('.',',')}</span><b>${String(w.kg).replace('.',',')} кг</b></div>`).join('');
+}
 function chart(ws){
-  const W=320,H=140,p=22;const xs=ws.map(w=>parse(w.date).getTime()),ys=ws.map(w=>+w.kg);
-  const x0=Math.min(...xs),x1=Math.max(...xs)||x0+1,y0=Math.min(...ys)*0.9,y1=Math.max(...ys)*1.05;
+  const W=320,H=150,p=24,b=D.dog.birth;
+  const xs=ws.map(w=>b?diff(b,w.date):parse(w.date).getTime()/864e5),ys=ws.map(w=>+w.kg);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys)*0.9,y1=Math.max(...ys)*1.06;
   const X=t=>p+(W-2*p)*((t-x0)/((x1-x0)||1)),Y=v=>H-p-(H-2*p)*((v-y0)/((y1-y0)||1));
   const pts=ws.map((w,i)=>[X(xs[i]),Y(ys[i])]);
+  const lab=i=>b?ageAt(b,ws[i].date).replace(/ (\d+ дн\.)$/,''):fmt(ws[i].date);
+  const show=new Set([0,ws.length-1,Math.floor((ws.length-1)/2)]);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}"><polyline fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" points="${pts.map(p=>p.join(',')).join(' ')}"/>
-    ${pts.map((q,i)=>`<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#fff" stroke="var(--accent)" stroke-width="2"/><text x="${q[0]}" y="${q[1]-9}" font-size="10" text-anchor="middle" fill="#8d8292">${ys[i]}</text>`).join('')}</svg>`;
+    ${pts.map((q,i)=>`<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#fff" stroke="var(--accent)" stroke-width="2"/><text x="${q[0]}" y="${q[1]-9}" font-size="10" text-anchor="middle" fill="#8d8292">${String(ys[i]).replace('.',',')}</text>`).join('')}
+    ${[...show].map(i=>`<text x="${pts[i][0]}" y="${H-6}" font-size="9" text-anchor="${i===0?'start':i===ws.length-1?'end':'middle'}" fill="#b0a5ac">${lab(i)}</text>`).join('')}</svg>`;
 }
-
+function weightCard(){
+  const ws=[...D.weights].sort((a,b)=>a.date.localeCompare(b.date));
+  return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>⚖️ Вес по возрасту</h3><button class="btn small sec" onclick="openWeight()">＋ Вес</button></div>
+    ${ws.length>1?chart(ws):''}${weightRows(ws)}
+    ${ws.length?'<p class="note" style="margin-top:6px">Возраст на день взвешивания. Нажмите на строку, чтобы удалить.</p>':''}</div>`;
+}
 function dogV(){
   const d=D.dog;
   const kv=(k,v)=>v?`<div class="kv"><span>${k}</span><b style="text-align:right">${esc(v)}</b></div>`:'';
   return `<div class="card hero"><div class="avatar" onclick="document.getElementById('photoIn').click()">${avatarHTML()}</div>
     <div class="grow"><h2>${esc(d.name)}</h2><div class="sub">Нажмите на фото, чтобы сменить</div></div></div>
   <div class="card">
-    ${kv('По паспорту',d.fullName)}${kv('Порода',d.breed)}${kv('Пол',d.sex)}${kv('Дата рождения',d.birth?fmt(d.birth)+' '+parse(d.birth).getFullYear():'')}${kv('Возраст',age(d.birth))}
+    ${kv('По паспорту',d.fullName)}${kv('Порода',d.breed)}${kv('Пол',d.sex)}${kv('Дата рождения',d.birth?fmt(d.birth)+(parse(d.birth).getFullYear()===new Date().getFullYear()?' '+new Date().getFullYear():''):'')}${kv('Возраст',age(d.birth))}
     ${kv('Окрас',d.color)}${kv('Чип',d.chip)}${kv('Ветпаспорт',d.passport)}${kv('Корм',d.food)}${kv('Аллергии',d.allergy)}
     ${kv('Ветклиника',d.vet)}${d.vetPhone?`<div class="kv"><span>Телефон врача</span><a href="tel:${esc(d.vetPhone)}"><b>${esc(d.vetPhone)}</b></a></div>`:''}
     ${d.notes?`<div class="note" style="padding-top:8px">${esc(d.notes)}</div>`:''}
     <button class="btn ghost" style="margin-top:12px" onclick="openDog()">✏️ Изменить данные</button>
   </div>
+  ${weightCard()}
   <div class="card"><h3>📱 Иконка на экране «Домой»</h3><p class="note">На иконке — фото из профиля. iPhone запоминает иконку при установке, поэтому после смены фото иконку нужно переустановить: 1) «Сохранить копию» ниже; 2) открыть сайт в Safari → «Поделиться» → «На экран Домой»; 3) в новой иконке «Загрузить» копию; 4) старую иконку удалить.</p></div>
   <div class="card"><h3>🔔 Напоминания</h3>
     <p class="note">Приложение работает без интернета, но само присылать уведомления iPhone ему не позволяет. Поэтому ближайшие дела выгружаются в Календарь iPhone — он напомнит за день и в день процедуры.</p>
@@ -367,7 +402,7 @@ function formSheet(){
   <label>Заметка (доза, клиника, реакция)</label><textarea id="f-note" placeholder="Например: 1/4 таблетки, после еды">${esc(F.note||'')}</textarea>
   ${F.mode==='rec'&&F.repeat?`<label><input type="checkbox" id="f-stop" ${F.stopped?'checked':''} style="width:auto;-webkit-appearance:checkbox;appearance:auto"> Больше не повторять (курс закончен)</label>`:''}
   <div class="actions">${F.mode!=='new'?`<button class="btn ghost" onclick="delF()">Удалить</button>`:''}<button class="btn" onclick="saveF()">Сохранить</button></div>
-  ${F.mode==='plan'?`<button class="btn sec" style="margin-top:8px" onclick="saveF(true)">✓ Отметить сделанным сегодня</button>`:''}`);
+`);
 }
 function keepInputs(){const g=id=>document.getElementById(id);if(!g('f-title'))return;F.title=g('f-title').value;F.date=g('f-date').value;F.repeat=+g('f-rep').value;F.until=g('f-until').value;F.note=g('f-note').value}
 function setF(k,v){keepInputs();F[k]=v;formSheet()}
@@ -376,6 +411,7 @@ function saveF(doneNow){
   keepInputs();const stop=document.getElementById('f-stop');
   if(!F.title.trim()){F.title=CATS[F.cat].n}
   if(!F.date){toast('Укажите дату');return}
+  if((F.mode==='rec'||(F.mode==='new'&&F.status==='done'))&&F.date>today()){toast('Эта дата ещё не наступила. Выберите «Запланировать»');return}
   const base={cat:F.cat,title:F.title.trim(),date:F.date,note:F.note.trim(),repeat:+F.repeat||0,until:F.until||''};
   if(F.mode==='rec'){Object.assign(D.records.find(r=>r.id===F.id),base,{stopped:stop?stop.checked:false})}
   else if(F.mode==='plan'){
@@ -390,18 +426,47 @@ function delF(){
   if(!confirm('Удалить запись?'))return;
   D.records=D.records.filter(r=>r.id!==F.id);D.plans=D.plans.filter(p=>p.id!==F.id);save();closeSheet();render();
 }
-function markDone(id){
-  const u=upcoming().find(x=>x.id===id);if(!u)return;
-  const day=u.date<today()?today():(u.date===today()?today():today());
-  if(u.kind==='plan')D.plans=D.plans.filter(p=>p.id!==u.id);
-  D.records.push({id:uid(),cat:u.cat,title:u.title,date:day,note:u.note||'',repeat:u.repeat||0,until:u.until||''});
-  bark(1);save();render();toast(u.repeat?'Готово ✓ Следующий раз: '+fmt(addDays(day,u.repeat)):'Готово ✓');
+let T=null;
+function openTask(id){
+  const u=upcoming().find(x=>x.id===id);if(!u)return;T=u;
+  const t=today(),late=u.date<t,can=u.date<=t;
+  sheet(`<h3>${CATS[u.cat].i} ${esc(u.title)}</h3>
+  <div class="s" style="margin:-4px 0 2px">${badge(u.date)} ${u.repeat?repeatText(u.repeat):''}${u.note?' · '+esc(u.note):''}</div>
+  ${late?`<p class="note" style="color:var(--red);font-weight:600">Срок был ${fmt(u.date)}. Сделали — отметьте ниже. Не успели — перенесите дату. Само ничего не сдвинется.</p>`:''}
+  <div class="tk"><div class="tk-h">🗓 ${late?'Не сделали? Перенести':'Когда сделать'}</div>
+    <div class="two"><div><label>Дата</label><input type="date" id="t-date" value="${late?t:u.date}"></div>
+    <div><label>Напомнить в</label><input type="time" id="t-time" value="${u.time||D.remindTime||'10:00'}"></div></div>
+    <button class="btn sec" style="margin-top:10px" onclick="moveTask()">Сохранить дату и время</button></div>
+  <div class="tk"><div class="tk-h">✓ Отметить выполненным</div>
+    ${can?`<label>Когда сделали</label><input type="date" id="t-done" value="${t}" min="${u.date}" max="${t}">
+      <button class="btn" style="margin-top:10px" onclick="doneTask()">✓ Да, сделали</button>
+      ${u.repeat?`<p class="note" style="margin-top:6px">Следующий раз посчитается от этой даты (+${u.repeat} дн.).</p>`:''}`
+    :`<button class="btn" disabled>✓ Да, сделали</button><p class="note" style="margin-top:6px">Отметить можно с ${fmt(u.date)}. Если сделали раньше — сначала перенесите дату выше.</p>`}
+  </div>
+  <button class="btn ghost" style="margin-top:12px" onclick="openUp('${u.id}')">Изменить название, повтор, заметку</button>`);
 }
+function moveTask(){
+  const u=T;const d=document.getElementById('t-date').value,tm=document.getElementById('t-time').value;
+  if(!d){toast('Укажите дату');return}
+  if(u.kind==='plan'){const p=D.plans.find(x=>x.id===u.id);p.date=d;p.time=tm}
+  else{const r=D.records.find(x=>x.id===u.src);if(d<=r.date){toast('Дата должна быть позже прошлого раза ('+fmt(r.date)+')');return}r.nextDate=d;r.nextTime=tm}
+  save();closeSheet();render();toast('Перенесено на '+fmt(d)+(tm?' '+tm:'')+'. Обновите Календарь в профиле');
+}
+function doneTask(){
+  const u=T;const d=(document.getElementById('t-done')||{}).value;const t=today();
+  if(!d||d<u.date||d>t){toast('Дата — с '+fmt(u.date)+' по сегодня');return}
+  if(u.kind==='plan')D.plans=D.plans.filter(p=>p.id!==u.id);
+  D.records.push({id:uid(),cat:u.cat,title:u.title,date:d,note:u.note||'',repeat:u.repeat||0,until:u.until||'',time:u.time||''});
+  bark(1);save();closeSheet();render();toast(u.repeat?'Готово ✓ Следующий раз: '+fmt(addDays(d,u.repeat)):'Готово ✓');
+}
+function markDone(id){openTask(id)}
 function openWeight(){
   sheet(`<h3>⚖️ Взвешивание</h3><div class="two"><div><label>Дата</label><input type="date" id="w-date" value="${today()}"></div>
   <div><label>Вес, кг</label><input type="number" step="0.01" inputmode="decimal" id="w-kg" placeholder="2.4"></div></div>
+  ${D.dog.birth?`<p class="note" id="w-age">Возраст в этот день: ${ageAt(D.dog.birth,today())}</p>`:''}
   <div class="actions"><button class="btn" onclick="saveW()">Сохранить</button></div>`);
   setTimeout(()=>document.getElementById('w-kg').focus(),250);
+  const wd=document.getElementById('w-date');wd.max=today();wd.oninput=()=>{const a=document.getElementById('w-age');if(a)a.textContent='Возраст в этот день: '+ageAt(D.dog.birth,wd.value)};
 }
 function saveW(){const kg=parseFloat(document.getElementById('w-kg').value.replace(',','.'));const d=document.getElementById('w-date').value;if(!kg||!d){toast('Введите вес');return}D.weights.push({id:uid(),date:d,kg:Math.round(kg*100)/100});save();closeSheet();render();toast('Вес сохранён')}
 function delWeight(id){if(confirm('Удалить это взвешивание?')){D.weights=D.weights.filter(w=>w.id!==id);save();render()}}
@@ -453,12 +518,14 @@ function buildICS(){
   const escI=s=>String(s).replace(/\\/g,'\\\\').replace(/[,;]/g,m=>'\\'+m).replace(/\n/g,'\\n');
   let L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pet Health//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:'+escI(D.dog.name+' — здоровье')];
   up.forEach(u=>{
-    const d=u.date.replace(/-/g,'');const dt=d+'T'+hh+mm+'00';
-    L.push('BEGIN:VEVENT','UID:'+u.id+'-'+d+'@pet-health','DTSTAMP:'+stamp,'DTSTART:'+dt,'DURATION:PT15M',
+    const d=u.date.replace(/-/g,'');const [h2,m2]=(u.time||(hh+':'+mm)).split(':');const dt=d+'T'+h2+m2+'00';
+    L.push('BEGIN:VEVENT','UID:'+u.id+'@pet-health','DTSTAMP:'+stamp,'DTSTART:'+dt,'DURATION:PT15M',
       'SUMMARY:'+escI(CATS[u.cat].i+' '+D.dog.name+': '+u.title),'DESCRIPTION:'+escI((u.note||'')+(u.repeat?' ('+repeatText(u.repeat)+')':'')));
     if(u.repeat&&u.kind==='auto'){let rr='RRULE:FREQ=DAILY;INTERVAL='+u.repeat;if(u.until)rr+=';UNTIL='+u.until.replace(/-/g,'')+'T235959';else if(u.repeat>1)rr+=';COUNT=6';else rr+=';COUNT=30';L.push(rr)}
     if(u.repeat!==1)L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Завтра','TRIGGER:-P1D','END:VALARM');
-    L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Сегодня','TRIGGER:PT0M','END:VALARM','END:VEVENT');
+    L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Сегодня','TRIGGER:PT0M','END:VALARM');
+    if(u.repeat!==1)['P1D','P2D'].forEach(x=>L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Если ещё не сделали — отметьте в приложении','TRIGGER;RELATED=START:'+x,'END:VALARM'));
+    L.push('END:VEVENT');
   });
   L.push('END:VCALENDAR');
   return L.join('\r\n');
