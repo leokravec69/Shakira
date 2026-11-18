@@ -60,7 +60,9 @@ button{font:inherit;border:0;cursor:pointer}
 nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:10}
 nav button{flex:1;background:none;color:var(--muted);font-size:11px;font-weight:600;padding:4px 0}
 nav button span{display:block;font-size:22px}
+nav button span{width:50px;height:34px;margin:0 auto 2px;border-radius:12px;display:flex!important;align-items:center;justify-content:center;transition:background .2s}
 nav button.on{color:var(--accent)}
+nav button.on span{background:color-mix(in srgb,var(--accent) 16%,white)}
 /* calendar */
 .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .calhead b{font-size:18px;text-transform:capitalize}
@@ -245,7 +247,7 @@ function homeV(){
       <div class="sub">${esc(D.dog.breed)} · ${esc(D.dog.sex)}</div>
       <div class="stats">
         <span class="pill">🎈 ${age(D.dog.birth)}</span>
-        ${lw?`<span class="pill">⚖️ ${lw.kg} кг</span>`:''}
+        ${lw?`<span class="pill" onclick="event.stopPropagation();openWeight()">⚖️ ${String(lw.kg).replace('.',',')} кг</span>`:''}
         <span class="pill" onclick="event.stopPropagation();bark(2)">🔊 Гав</span>
         ${bd!==null&&bd<=30?`<span class="pill">🎂 ДР через ${bd} дн.</span>`:''}
       </div>
@@ -325,6 +327,8 @@ function logV(){
   </div>`:''}
   <div class="card"><h3>История</h3>${recs.map(recRow).join('')||'<div class="empty">Пока пусто</div>'}</div>`;
 }
+function weightHist(){const ws=[...D.weights].sort((a,b)=>a.date.localeCompare(b.date));if(!ws.length)return '';
+  return `<h3 style="margin-top:20px">📈 История веса</h3>${ws.length>1?chart(ws):'<p class="note">График появится после второго взвешивания.</p>'}${weightRows(ws)}`}
 function weightRows(ws,n){
   if(!ws.length)return '<div class="empty">Добавьте первое взвешивание</div>';
   const b=D.dog.birth;const rows=ws.map((w,i)=>({w,d:i?Math.round((w.kg-ws[i-1].kg)*100)/100:null})).reverse();
@@ -346,7 +350,7 @@ function chart(ws){
 function weightCard(){
   const ws=[...D.weights].sort((a,b)=>a.date.localeCompare(b.date));
   return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3>⚖️ Вес по возрасту</h3><button class="btn small sec" onclick="openWeight()">＋ Вес</button></div>
-    ${ws.length>1?chart(ws):''}${weightRows(ws)}
+    ${ws.length>1?chart(ws):ws.length?'<p class="note">График появится после второго взвешивания.</p>':''}${weightRows(ws)}
     ${ws.length?'<p class="note" style="margin-top:6px">Возраст на день взвешивания. Нажмите на строку, чтобы удалить.</p>':''}</div>`;
 }
 function dogV(){
@@ -461,15 +465,15 @@ function doneTask(){
 }
 function markDone(id){openTask(id)}
 function openWeight(){
-  sheet(`<h3>⚖️ Взвешивание</h3><div class="two"><div><label>Дата</label><input type="date" id="w-date" value="${today()}"></div>
+  sheet(`<h3>⚖️ Взвешивание</h3><div class="two"><div><label>Дата (можно прошлую)</label><input type="date" id="w-date" value="${today()}"></div>
   <div><label>Вес, кг</label><input type="number" step="0.01" inputmode="decimal" id="w-kg" placeholder="2.4"></div></div>
   ${D.dog.birth?`<p class="note" id="w-age">Возраст в этот день: ${ageAt(D.dog.birth,today())}</p>`:''}
-  <div class="actions"><button class="btn" onclick="saveW()">Сохранить</button></div>`);
+  <div class="actions"><button class="btn" onclick="saveW()">Сохранить</button></div>${weightHist()}`);
   setTimeout(()=>document.getElementById('w-kg').focus(),250);
   const wd=document.getElementById('w-date');wd.max=today();wd.oninput=()=>{const a=document.getElementById('w-age');if(a)a.textContent='Возраст в этот день: '+ageAt(D.dog.birth,wd.value)};
 }
 function saveW(){const kg=parseFloat(document.getElementById('w-kg').value.replace(',','.'));const d=document.getElementById('w-date').value;if(!kg||!d){toast('Введите вес');return}D.weights.push({id:uid(),date:d,kg:Math.round(kg*100)/100});save();closeSheet();render();toast('Вес сохранён')}
-function delWeight(id){if(confirm('Удалить это взвешивание?')){D.weights=D.weights.filter(w=>w.id!==id);save();render()}}
+function delWeight(id){if(confirm('Удалить это взвешивание?')){D.weights=D.weights.filter(w=>w.id!==id);save();render();if(document.getElementById('mask').classList.contains('open')&&document.getElementById('w-kg'))openWeight()}}
 function openDog(){
   const d=D.dog;const f=(k,l,t='text',ph='')=>`<label>${l}</label><input id="d-${k}" type="${t}" value="${esc(d[k]||'')}" placeholder="${ph}">`;
   sheet(`<h3>Данные собаки</h3>${f('name','Кличка')}${f('fullName','Кличка по паспорту')}<div class="two"><div>${f('breed','Порода')}</div><div>${f('sex','Пол')}</div></div>
